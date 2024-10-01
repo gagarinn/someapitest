@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@id/nav_graph_id_exchange"
+    app:startDestination="@id/exchange_fragment">
+
+    <fragment
+        android:id="@+id/exchange_fragment"
+        android:name="net.someapitest.exchange.ExchangeFragment"
+        tools:layout="@layout/fragment_exchange"/>
+</navigation>
