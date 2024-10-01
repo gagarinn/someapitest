@@ -6,23 +6,61 @@
 
     <data>
 
-<!--        <variable-->
-<!--            name="model"-->
-<!--            type="net.devicedetails.DeviceDetailsViewModel" />-->
+        <variable
+            name="adapter"
+            type="net.someapitest.exchange.my.balance.MyBalanceAdapter" />
+
+        <variable
+            name="model"
+            type="net.someapitest.exchange.ExchangeViewModel" />
     </data>
 
     <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <TextView
-            android:id="@+id/serial_number"
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/exchange_toolbar"
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:text="Exchange fragment"
+            android:layout_height="?attr/actionBarSize"
+            app:title="@string/exchange_screen_title"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            tools:text="Serial number"/>
+            tools:layout_height="50dp"
+            tools:text="Title"/>
+
+        <TextView
+            android:id="@+id/my_balance_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            style="@style/Subtitle1Theme"
+            android:text="@string/my_balances_label"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/exchange_toolbar" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/my_balance_progress"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:isVisible="@{model.isLoadingBalance}"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/my_balance_text"
+            tools:layout_height="1dp"/>
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/my_balance_rv"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:adapter="@{adapter}"
+            android:orientation="horizontal"
+            android:isVisible="@{!model.isLoadingBalance}"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            app:layout_constraintTop_toBottomOf="@+id/my_balance_progress"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"/>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
