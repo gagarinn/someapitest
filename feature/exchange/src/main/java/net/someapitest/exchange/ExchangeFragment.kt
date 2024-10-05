@@ -12,6 +12,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import net.someapitest.exchange.databinding.FragmentExchangeBinding
+import net.someapitest.exchange.events.ExchangeEvents
 import net.someapitest.exchange.my.balance.MyBalanceAdapter
 import javax.inject.Inject
 
@@ -47,7 +48,7 @@ class ExchangeFragment : Fragment() {
 
     private fun setUpViewModelActions() {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.devicesAction.collect { event ->
+            viewModel.exchangeAction.collect { event ->
                 when (event) {
                     is ExchangeEvents.OnBalanceUpdated -> myBalanceAdapter.update(event.data)
                 }

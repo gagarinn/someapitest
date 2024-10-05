@@ -14,7 +14,7 @@
 
         <TextView
             android:id="@+id/balance_item_title"
-            style="@style/Title1Theme"
+            style="@style/TextTitle1Theme"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_margin="@dimen/material_spacing"

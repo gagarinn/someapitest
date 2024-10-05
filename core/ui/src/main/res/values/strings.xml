@@ -3,4 +3,9 @@
 
     <string name="exchange_screen_title">Currency converter</string>
     <string name="my_balances_label">My balances</string>
+    <string name="currency_exchange_label">Currency exchange</string>
+    <string name="exchange">Exchange</string>
+    <string name="submit">Submit</string>
+    <string name="sell">Sell</string>
+    <string name="receive">Receive</string>
 </resources>
