@@ -23,6 +23,7 @@ import net.someapitest.domain.models.Amount
 import net.someapitest.domain.models.Rates
 import net.someapitest.domain.models.SupportedCurrency
 import net.someapitest.domain.result.NetworkStatus
+import net.someapitest.domain.usecases.EstimateExchangeUsecase
 import net.someapitest.domain.usecases.GetBalanceUsecase
 import net.someapitest.domain.usecases.GetExchangeRateUsecase
 import net.someapitest.exchange.events.ExchangeEvents
@@ -36,6 +37,7 @@ private const val DEFAULT_UPDATE_RATES_MILISECONDS = 5000L
 class ExchangeViewModel @Inject constructor(
     private val getBallanceUsecase: GetBalanceUsecase,
     private val getExchangeRateUsecase: GetExchangeRateUsecase,
+    private val estimateExchangeUsecase: EstimateExchangeUsecase,
 ) : ViewModel() {
 
     val scope: CoroutineScope
@@ -68,8 +70,8 @@ class ExchangeViewModel @Inject constructor(
     private val _isLoadingRate = MutableStateFlow(false)
     val isLoadingRate get() = _isLoadingRate.asStateFlow()
 
-    private val _hasItems = MutableStateFlow(false)
-    val hasItems get() = _hasItems.asStateFlow()
+    private val _hasError = MutableStateFlow(false)
+    val hasError get() = _hasError.asStateFlow()
 
     private val _isExchanging = MutableStateFlow(false)
     val isExchanging get() = _isExchanging.asStateFlow()
@@ -120,6 +122,35 @@ class ExchangeViewModel @Inject constructor(
 
     fun onTextChanged(text: CharSequence) {
         _toSellAmount.update { text.toString() }
+        if (text.toString() != INIT_AMOUNT) {
+            text.toString().toDoubleOrNull()?.let {
+                viewModelScope.launch {
+                    estimateExchangeUsecase.invoke(
+                        Amount(
+                            value = it,
+                            currency = selectedToSellCurrency.value
+                        ), to = selectedToReceiveCurrency.value
+                    ).collect { result ->
+                        when (result) {
+                            is NetworkStatus.Loading -> Unit
+                            is NetworkStatus.Error -> {
+                                _exchangeAction.tryEmit(ExchangeEvents.OnError(result.errorMessage))
+                                _toReceivedAmount.update { INIT_AMOUNT }
+                                _hasError.update { true }
+                            }
+
+                            is NetworkStatus.Success -> result.data?.second?.formattedValue?.let { value ->
+                                _toReceivedAmount.update { value }
+                                _hasError.update { false }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            _toReceivedAmount.update { INIT_AMOUNT }
+            _hasError.update { false }
+        }
     }
 
     private fun stopExchanging() {
@@ -150,7 +181,8 @@ class ExchangeViewModel @Inject constructor(
     }
 
     private fun submit() {
-
+//        temp update
+        _isExchanging.update { false }
     }
 
     private fun handleBalance(result: NetworkStatus<List<Amount>>) {
@@ -159,7 +191,6 @@ class ExchangeViewModel @Inject constructor(
             is NetworkStatus.Error -> _isLoadingBalance.update { false }
             is NetworkStatus.Success -> {
                 _isLoadingBalance.update { false }
-                _hasItems.update { result.data.orEmpty().isNotEmpty() }
                 _exchangeAction.tryEmit(ExchangeEvents.OnBalanceUpdated(result.data.orEmpty()))
             }
         }

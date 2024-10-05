@@ -16,6 +16,8 @@ import javax.inject.Inject
 
 private const val DEFAULT_AMOUNT = 0.0
 private const val DEFAULT_AMOUNT_EUR = 1000.0
+private const val NUMBERS_OF_FREE_OPERATIONS = 5
+private const val DEFAULT_FEE = 0.007
 
 class CurrencyRepositoryImpl @Inject constructor(
     private val currencyDataStore: CurrencyDataStore
@@ -27,8 +29,10 @@ class CurrencyRepositoryImpl @Inject constructor(
         } else {
             Amount(DEFAULT_AMOUNT, currency)
         }
-
     }.toMutableList()
+
+    private var currentRates: Rates? = null
+    private var numberOfOperation = 0L
 
     override suspend fun getBalance(): Flow<NetworkStatus<List<Amount>>> {
         delay(1000)
@@ -38,12 +42,83 @@ class CurrencyRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getRates(): Flow<NetworkStatus<Rates>> {
-        return flow { emit(currencyDataStore.getRates()) }
+        val rates = currencyDataStore.getRates()
+        rates.data?.let {
+            currentRates = it
+        }
+        return flow { emit(rates) }
             .onStart { emit(NetworkStatus.Loading()) }
             .flowOn(Dispatchers.IO)
     }
 
     override suspend fun updateBalance(amounts: List<Amount>) {
         balance = amounts.toMutableList()
+    }
+
+    override suspend fun estimateExchange(
+        amount: Amount,
+        to: SupportedCurrency
+    ): Flow<NetworkStatus<Pair<Amount, Amount>>> {
+        var result: Pair<Amount, Amount>? = null
+        var errorMessage: String? = null
+        val rate = findRate(amount.currency, to)
+
+        if (rate == null) {
+            errorMessage = "Unknown rate"
+        }
+        rate?.let {
+            val estimatedValue = findValue(amount, it, to)
+            if (isEnoughMoney(estimatedValue.first)) {
+                result = estimatedValue
+            } else {
+                errorMessage = "Not enough money"
+            }
+        }
+
+        return flow {
+            emit(
+                if (result != null) NetworkStatus.Success(result) else NetworkStatus.Error(
+                    errorMessage = errorMessage
+                )
+            )
+        }
+            .onStart { emit(NetworkStatus.Loading()) }
+            .flowOn(Dispatchers.IO)
+    }
+
+    private fun isEnoughMoney(estimated: Amount): Boolean {
+        return balance.first { estimated.currency == it.currency }.value - estimated.value >= 0
+    }
+
+    private fun findValue(
+        amount: Amount,
+        rate: Double,
+        to: SupportedCurrency
+    ): Pair<Amount, Amount> {
+        return if (numberOfOperation > NUMBERS_OF_FREE_OPERATIONS) {
+            val resultCurrent = Amount(
+                value = amount.value + amount.value * DEFAULT_FEE,
+                currency = amount.currency
+            )
+            val resultTo = Amount(value = amount.value * rate * DEFAULT_FEE, currency = to)
+            Pair(resultCurrent, resultTo)
+        } else {
+            val resultCurrent = amount
+            val resultTo = Amount(value = amount.value * rate, currency = to)
+            Pair(resultCurrent, resultTo)
+        }
+    }
+
+    private fun findRate(from: SupportedCurrency, to: SupportedCurrency): Double? {
+        var result: Double? = null
+        val rateTo = currentRates?.rates?.first { it.currency == to }?.rate
+        if (from == SupportedCurrency.EUR) {
+            result = rateTo
+        } else {
+            rateTo?.let {
+                result = (currentRates?.rates?.first { it.currency == from }?.rate)?.times(it)
+            }
+        }
+        return result
     }
 }
