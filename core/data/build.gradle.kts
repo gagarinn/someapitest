@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.library)
     alias(libs.plugins.kotlin)
@@ -11,6 +13,16 @@ android {
 
     defaultConfig {
         minSdk = libs.versions.minSdk.get().toInt()
+
+        val localProperties = Properties().apply {
+            val file = rootProject.file("local.properties")
+            if (file.exists()) {
+                load(file.inputStream())
+            }
+        }
+
+        val baseUrl: String = localProperties.getProperty("baseUrl") ?: "https://default.example.com/"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
     }
 
     buildTypes {
@@ -24,6 +36,9 @@ android {
     }
     kotlinOptions {
         jvmTarget = "1.8"
+    }
+    buildFeatures {
+        buildConfig = true
     }
 }
 

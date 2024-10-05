@@ -1,10 +1,11 @@
 package net.someapitest.exchange
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,18 +20,22 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.someapitest.domain.models.Amount
+import net.someapitest.domain.models.Rates
 import net.someapitest.domain.models.SupportedCurrency
 import net.someapitest.domain.result.NetworkStatus
 import net.someapitest.domain.usecases.GetBalanceUsecase
+import net.someapitest.domain.usecases.GetExchangeRateUsecase
 import net.someapitest.exchange.events.ExchangeEvents
 import net.someapitest.ui.SingleEvent
 import javax.inject.Inject
 
 private const val INIT_AMOUNT = "0.00"
+private const val DEFAULT_UPDATE_RATES_MILISECONDS = 5000L
 
 @HiltViewModel
 class ExchangeViewModel @Inject constructor(
     private val getBallanceUsecase: GetBalanceUsecase,
+    private val getExchangeRateUsecase: GetExchangeRateUsecase,
 ) : ViewModel() {
 
     val scope: CoroutineScope
@@ -60,7 +65,7 @@ class ExchangeViewModel @Inject constructor(
     private val _isLoadingBalance = MutableStateFlow(true)
     val isLoadingBalance get() = _isLoadingBalance.asStateFlow()
 
-    private val _isLoadingRate = MutableStateFlow(true)
+    private val _isLoadingRate = MutableStateFlow(false)
     val isLoadingRate get() = _isLoadingRate.asStateFlow()
 
     private val _hasItems = MutableStateFlow(false)
@@ -68,6 +73,9 @@ class ExchangeViewModel @Inject constructor(
 
     private val _isExchanging = MutableStateFlow(false)
     val isExchanging get() = _isExchanging.asStateFlow()
+
+    private var exchangeRateJob: Job? = null
+    private var currentRates: Rates? = null
 
     private val _exchangeAction = MutableSharedFlow<SingleEvent>(extraBufferCapacity = 1)
     val exchangeAction = _exchangeAction.asSharedFlow()
@@ -86,19 +94,25 @@ class ExchangeViewModel @Inject constructor(
         }
     }
 
-    fun onExchangeClick(){
-        _exchangeAction.tryEmit(ExchangeEvents.OnExchangeClicked)
+    fun onExchangeClick() {
+        if (_isExchanging.value) {
+            _exchangeAction.tryEmit(ExchangeEvents.OnSubmitClicked)
+            submit()
+            stopExchanging()
+        } else {
+            _isExchanging.update { true }
+            _exchangeAction.tryEmit(ExchangeEvents.OnExchangeClicked)
+            startExchanging()
+        }
     }
 
-    fun onToSellCurrencySelected(position: Int){
-        Log.e("fuck", "-----onToSellCurrencySelected: ${SupportedCurrency.entries[position]}", )
+    fun onToSellCurrencySelected(position: Int) {
         selectedToSellCurrency.update { SupportedCurrency.entries[position] }
     }
 
-    fun onToReceiveCurrencySelected(position: Int){
+    fun onToReceiveCurrencySelected(position: Int) {
         viewModelScope.launch {
-            toReceiveCurrencies.collect{list ->
-                Log.e("fuck", "-----onToReceiveCurrencySelected: ${list[position]}", )
+            toReceiveCurrencies.collect { list ->
                 selectedToReceiveCurrency.update { list[position] }
             }
         }
@@ -108,16 +122,41 @@ class ExchangeViewModel @Inject constructor(
         _toSellAmount.update { text.toString() }
     }
 
-    private fun handleBalance(result: NetworkStatus<List<Amount>>){
+    private fun stopExchanging() {
+        exchangeRateJob?.cancel()
+    }
+
+    private fun startExchanging() {
+        exchangeRateJob = viewModelScope.launch {
+            while (true) {
+                updateRates()
+                delay(DEFAULT_UPDATE_RATES_MILISECONDS)
+            }
+        }
+        exchangeRateJob?.start()
+    }
+
+    private suspend fun updateRates() {
+        getExchangeRateUsecase.invoke().collect { result ->
+            when (result) {
+                is NetworkStatus.Loading -> _isLoadingRate.update { true }
+                is NetworkStatus.Error -> _isLoadingRate.update { false }
+                is NetworkStatus.Success -> {
+                    _isLoadingRate.update { false }
+                    currentRates = result.data
+                }
+            }
+        }
+    }
+
+    private fun submit() {
+
+    }
+
+    private fun handleBalance(result: NetworkStatus<List<Amount>>) {
         when (result) {
-            is NetworkStatus.Loading -> {
-                _isLoadingBalance.update { true }
-            }
-
-            is NetworkStatus.Error -> {
-                _isLoadingBalance.update { false }
-            }
-
+            is NetworkStatus.Loading -> _isLoadingBalance.update { true }
+            is NetworkStatus.Error -> _isLoadingBalance.update { false }
             is NetworkStatus.Success -> {
                 _isLoadingBalance.update { false }
                 _hasItems.update { result.data.orEmpty().isNotEmpty() }
