@@ -8,4 +8,10 @@
     <string name="submit">Submit</string>
     <string name="sell">Sell</string>
     <string name="receive">Receive</string>
+    <string name="done">Done</string>
+    <string name="error_title">Error Detected</string>
+    <string name="unknown_error">Unexpected Error</string>
+    <string name="successSubmit">Currency converted</string>
+    <string name="commission">Commission Fee: %1$s</string>
+    <string name="converted">You have converted %1$s to %2$s. </string>
 </resources>

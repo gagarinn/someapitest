@@ -20,12 +20,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.someapitest.domain.models.Amount
-import net.someapitest.domain.models.Rates
 import net.someapitest.domain.models.SupportedCurrency
+import net.someapitest.domain.models.Transaction
 import net.someapitest.domain.result.NetworkStatus
 import net.someapitest.domain.usecases.EstimateExchangeUsecase
 import net.someapitest.domain.usecases.GetBalanceUsecase
 import net.someapitest.domain.usecases.GetExchangeRateUsecase
+import net.someapitest.domain.usecases.SubmitExchangeUsecase
 import net.someapitest.exchange.events.ExchangeEvents
 import net.someapitest.ui.SingleEvent
 import javax.inject.Inject
@@ -38,6 +39,7 @@ class ExchangeViewModel @Inject constructor(
     private val getBallanceUsecase: GetBalanceUsecase,
     private val getExchangeRateUsecase: GetExchangeRateUsecase,
     private val estimateExchangeUsecase: EstimateExchangeUsecase,
+    private val submitExchangeUsecase: SubmitExchangeUsecase,
 ) : ViewModel() {
 
     val scope: CoroutineScope
@@ -77,7 +79,7 @@ class ExchangeViewModel @Inject constructor(
     val isExchanging get() = _isExchanging.asStateFlow()
 
     private var exchangeRateJob: Job? = null
-    private var currentRates: Rates? = null
+    private var transaction: Transaction? = null
 
     private val _exchangeAction = MutableSharedFlow<SingleEvent>(extraBufferCapacity = 1)
     val exchangeAction = _exchangeAction.asSharedFlow()
@@ -110,20 +112,32 @@ class ExchangeViewModel @Inject constructor(
 
     fun onToSellCurrencySelected(position: Int) {
         selectedToSellCurrency.update { SupportedCurrency.entries[position] }
+        updateEstimation()
     }
 
     fun onToReceiveCurrencySelected(position: Int) {
         viewModelScope.launch {
             toReceiveCurrencies.collect { list ->
                 selectedToReceiveCurrency.update { list[position] }
+                updateEstimation()
             }
         }
     }
 
     fun onTextChanged(text: CharSequence) {
         _toSellAmount.update { text.toString() }
-        if (text.toString() != INIT_AMOUNT) {
-            text.toString().toDoubleOrNull()?.let {
+        updateEstimation()
+    }
+
+    fun onSubmited() {
+        _isExchanging.update { false }
+        _toSellAmount.update { INIT_AMOUNT }
+        getBalance()
+    }
+
+    private fun updateEstimation() {
+        if (_toSellAmount.value != INIT_AMOUNT) {
+            _toSellAmount.value.toDoubleOrNull()?.let {
                 viewModelScope.launch {
                     estimateExchangeUsecase.invoke(
                         Amount(
@@ -132,15 +146,16 @@ class ExchangeViewModel @Inject constructor(
                         ), to = selectedToReceiveCurrency.value
                     ).collect { result ->
                         when (result) {
-                            is NetworkStatus.Loading -> Unit
+                            is NetworkStatus.Loading -> transaction = null
                             is NetworkStatus.Error -> {
                                 _exchangeAction.tryEmit(ExchangeEvents.OnError(result.errorMessage))
                                 _toReceivedAmount.update { INIT_AMOUNT }
                                 _hasError.update { true }
+                                transaction = null
                             }
-
-                            is NetworkStatus.Success -> result.data?.second?.formattedValue?.let { value ->
-                                _toReceivedAmount.update { value }
+                            is NetworkStatus.Success -> result.data?.let {resultTransaction ->
+                                transaction = resultTransaction
+                                _toReceivedAmount.update { resultTransaction.to.formattedValue }
                                 _hasError.update { false }
                             }
                         }
@@ -172,17 +187,32 @@ class ExchangeViewModel @Inject constructor(
             when (result) {
                 is NetworkStatus.Loading -> _isLoadingRate.update { true }
                 is NetworkStatus.Error -> _isLoadingRate.update { false }
-                is NetworkStatus.Success -> {
-                    _isLoadingRate.update { false }
-                    currentRates = result.data
-                }
+                is NetworkStatus.Success -> _isLoadingRate.update { false }
             }
         }
     }
 
     private fun submit() {
-//        temp update
-        _isExchanging.update { false }
+        transaction?.let {
+            viewModelScope.launch {
+                submitExchangeUsecase.invoke(it).collect{ result ->
+                    when (result) {
+                        is NetworkStatus.Loading -> Unit
+                        is NetworkStatus.Error -> {
+                            _exchangeAction.tryEmit(ExchangeEvents.OnError(result.errorMessage))
+                        }
+                        is NetworkStatus.Success -> {
+                            if (result.data == true){
+                                _exchangeAction.tryEmit(ExchangeEvents.OnSubmited(it))
+                                transaction = null
+                            } else {
+                                _exchangeAction.tryEmit(ExchangeEvents.OnError("Submit error"))
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun handleBalance(result: NetworkStatus<List<Amount>>) {

@@ -9,5 +9,5 @@ data class Amount(
     val currency: SupportedCurrency
 ) {
     val formattedValue: String
-        get() = if (value == 0.0) ZERO_VALUE else DecimalFormat("#.00").format(value)
+        get() = if (value == 0.0) ZERO_VALUE else DecimalFormat("#0.00").format(value)
 }
