@@ -54,4 +54,11 @@ dependencies {
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
     implementation(libs.logging.interceptor)
+
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+
+    testImplementation(libs.mockito.kotlin)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
